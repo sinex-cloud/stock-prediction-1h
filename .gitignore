@@ -1,0 +1,20 @@
+# virtual environment
+.venv/
+
+# python cache
+__pycache__/
+*.pyc
+
+# jupyter
+.ipynb_checkpoints/
+
+# data (not versioned)
+data/raw/
+data/processed/
+
+# trained models
+models/
+
+# datasets
+*.csv
+*.parquet
