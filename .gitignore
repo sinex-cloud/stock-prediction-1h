@@ -8,9 +8,13 @@ __pycache__/
 # jupyter
 .ipynb_checkpoints/
 
-# data (not versioned)
-data/raw/
-data/processed/
+# data (ignore everything inside)
+data/raw/*
+data/processed/*
+
+# but keep folder structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
 
 # trained models
 models/
