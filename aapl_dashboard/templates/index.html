@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AAPL Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0a0b0e;--surface:#111318;--surface2:#181c24;--border:#1e2330;
+  --accent:#3b82f6;--accent2:#60a5fa;--green:#22c55e;--red:#ef4444;
+  --amber:#f59e0b;--purple:#a78bfa;--teal:#2dd4bf;
+  --text:#e2e8f0;--muted:#64748b;--muted2:#94a3b8;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  --r:10px;--sidebar:260px;--header:52px;--subnav:42px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ════════════════════════════════════════════
+   TOP HEADER (layer 1)
+════════════════════════════════════════════ */
+#top-header{
+  position:fixed;top:0;left:0;right:0;height:var(--header);z-index:300;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.5rem;background:var(--surface);border-bottom:1px solid var(--border);
+}
+.logo{font-family:var(--mono);font-size:1rem;color:var(--accent);letter-spacing:-.5px}
+.logo span{color:var(--text)}
+.badge{font-family:var(--mono);font-size:.6rem;padding:2px 7px;border-radius:4px;
+  background:rgba(59,130,246,.12);color:var(--accent2);border:1px solid rgba(59,130,246,.25);margin-left:8px}
+.hright{display:flex;align-items:center;gap:12px}
+#last-updated{font-family:var(--mono);font-size:.65rem;color:var(--muted)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ════════════════════════════════════════════
+   SECTION NAV (layer 2) — sticky under header
+════════════════════════════════════════════ */
+#section-nav{
+  position:fixed;top:var(--header);left:0;right:0;height:var(--subnav);z-index:290;
+  background:rgba(10,11,14,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 1.5rem;gap:4px;
+}
+.snav-btn{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.4px;
+  padding:5px 14px;border:none;background:none;color:var(--muted);
+  cursor:pointer;border-radius:6px;transition:all .18s;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;
+}
+.snav-btn:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.snav-btn.active{color:var(--accent2);background:rgba(59,130,246,.12)}
+.snav-num{
+  width:18px;height:18px;border-radius:50%;border:1px solid currentColor;
+  display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0;
+}
+/* sidebar toggle in nav bar */
+#sb-toggle{
+  margin-left:auto;font-family:var(--mono);font-size:.68rem;padding:4px 10px;
+  border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);cursor:pointer;
+  transition:all .15s;
+}
+#sb-toggle:hover{color:var(--text);border-color:var(--muted)}
+
+/* ════════════════════════════════════════════
+   BODY LAYOUT
+════════════════════════════════════════════ */
+#body-wrap{
+  display:flex;
+  margin-top:calc(var(--header) + var(--subnav));
+  min-height:calc(100vh - var(--header) - var(--subnav));
+}
+
+/* ════════════════════════════════════════════
+   SIDEBAR
+════════════════════════════════════════════ */
+#sidebar{
+  width:var(--sidebar);flex-shrink:0;
+  position:sticky;top:calc(var(--header)+var(--subnav));
+  height:calc(100vh - var(--header) - var(--subnav));
+  overflow-y:auto;background:var(--surface);border-right:1px solid var(--border);
+  padding:1rem;display:flex;flex-direction:column;gap:1rem;
+  transition:width .25s,opacity .25s;
+}
+#sidebar.hidden{width:0;opacity:0;padding:0;overflow:hidden}
+.sb-section-title{
+  font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--muted);padding-bottom:.4rem;border-bottom:1px solid var(--border);margin-bottom:.4rem;
+  white-space:nowrap;
+}
+label.sb-label{font-size:.72rem;color:var(--muted2);display:block;margin-bottom:3px;white-space:nowrap}
+input[type=date],select{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);border-radius:6px;padding:5px 8px;font-size:.72rem;font-family:var(--sans);outline:none;
+}
+input[type=date]:focus{border-color:var(--accent)}
+.sb-row{display:flex;flex-direction:column;gap:3px}
+.apply-btn{width:100%;padding:7px;background:var(--accent);color:#fff;border:none;border-radius:6px;
+  font-size:.75rem;font-family:var(--sans);font-weight:500;cursor:pointer;margin-top:4px;transition:opacity .15s}
+.apply-btn:hover{opacity:.85}
+.reset-btn{width:100%;padding:5px;background:transparent;color:var(--muted);border:1px solid var(--border);
+  border-radius:6px;font-size:.7rem;font-family:var(--sans);cursor:pointer;margin-top:2px}
+.reset-btn:hover{border-color:var(--muted)}
+.cb-group{display:flex;flex-direction:column;gap:4px}
+.cb-item{display:flex;align-items:center;gap:7px;cursor:pointer;padding:3px 5px;border-radius:5px;transition:background .1s}
+.cb-item:hover{background:var(--surface2)}
+.cb-item input{accent-color:var(--accent);width:12px;height:12px;cursor:pointer}
+.cb-item span{font-size:.72rem;color:var(--muted2)}
+.qrange{display:flex;flex-wrap:wrap;gap:4px}
+.qr-btn{flex:1;min-width:36px;padding:4px 5px;font-size:.65rem;font-family:var(--mono);
+  border:1px solid var(--border);border-radius:5px;background:none;color:var(--muted);cursor:pointer;
+  text-align:center;transition:all .15s}
+.qr-btn.active,.qr-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ════════════════════════════════════════════
+   SCROLL CONTENT
+════════════════════════════════════════════ */
+#scroll-content{flex:1;overflow-y:auto;height:calc(100vh - var(--header) - var(--subnav))}
+
+/* ── Section wrappers ── */
+.section{padding:2rem 1.75rem;border-bottom:1px solid var(--border)}
+.section:last-child{border-bottom:none}
+.section-heading{
+  display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;padding-bottom:.875rem;
+  border-bottom:1px solid var(--border);
+}
+.section-num{
+  width:28px;height:28px;border-radius:8px;background:rgba(59,130,246,.12);
+  border:1px solid rgba(59,130,246,.3);display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.75rem;color:var(--accent2);flex-shrink:0;
+}
+.section-title{font-family:var(--mono);font-size:.9rem;color:var(--text);letter-spacing:-.2px}
+.section-sub{font-size:.72rem;color:var(--muted);margin-left:auto}
+
+/* ── Cards ── */
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.125rem;margin-bottom:1rem}
+.chart-card:last-child{margin-bottom:0}
+.chart-title{font-family:var(--mono);font-size:.65rem;color:var(--muted2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:.75rem;display:flex;align-items:center;gap:6px}
+.chart-wrap{position:relative;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:.625rem}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--muted2)}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}}
+
+/* ── Metric cards ── */
+.metrics-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:1rem}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:.875rem 1rem;transition:border-color .2s;cursor:default}
+.metric-card:hover{border-color:rgba(59,130,246,.4)}
+.metric-label{font-size:.63rem;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:.35rem;display:flex;align-items:center;gap:4px}
+.metric-value{font-family:var(--mono);font-size:1.25rem;font-weight:700;color:var(--text);line-height:1}
+.metric-sub{font-family:var(--mono);font-size:.63rem;margin-top:.3rem;color:var(--muted2)}
+.up{color:var(--green)!important}.down{color:var(--red)!important}
+
+/* ── Dynamic analysis box ── */
+.analysis-box{
+  margin-top:.875rem;padding:.875rem 1rem;border-radius:8px;
+  background:rgba(59,130,246,.04);border:1px solid rgba(59,130,246,.12);
+  border-left:3px solid var(--accent);
+}
+.analysis-box .ab-title{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.6px;color:var(--accent2);margin-bottom:.4rem}
+.analysis-box .ab-text{font-size:.78rem;color:var(--muted2);line-height:1.65}
+.analysis-box .ab-text strong{color:var(--text);font-weight:500}
+.analysis-box .ab-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:.5rem}
+.ab-chip{font-family:var(--mono);font-size:.62rem;padding:2px 8px;border-radius:20px;
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted2)}
+.ab-chip.bull{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:var(--green)}
+.ab-chip.bear{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.25);color:var(--red)}
+.ab-chip.warn{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:var(--amber)}
+
+/* ── Feature table ── */
+.feat-filters{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem}
+.filter-btn{font-size:.62rem;font-family:var(--mono);padding:3px 9px;border-radius:20px;
+  border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;transition:all .15s}
+.filter-btn.active,.filter-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.feat-table{width:100%;border-collapse:collapse;font-size:.74rem}
+.feat-table th{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);padding:.45rem .7rem;text-align:left;border-bottom:1px solid var(--border)}
+.feat-table td{padding:.48rem .7rem;border-bottom:1px solid rgba(30,35,48,.7);font-family:var(--mono);color:var(--muted2)}
+.feat-table td:first-child{color:var(--text)}
+.feat-table td:nth-child(2){color:var(--accent2)}
+.feat-table tr:hover td{background:rgba(255,255,255,.02)}
+.cat-pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:.58rem;
+  background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.22)}
+
+/* ── Missing bars ── */
+.miss-bar-wrap{display:flex;flex-direction:column;gap:6px}
+.miss-row{display:grid;grid-template-columns:140px 1fr 36px;align-items:center;gap:8px}
+.miss-label{font-family:var(--mono);font-size:.65rem;color:var(--muted2);text-align:right}
+.miss-bar-bg{background:var(--border);border-radius:3px;height:7px;overflow:hidden}
+.miss-bar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.miss-count{font-family:var(--mono);font-size:.62rem;color:var(--muted)}
+
+/* ── Prediction ── */
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-bottom:1rem}
+.pred-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.875rem 1rem}
+.pred-card .p-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:.3rem;font-family:var(--mono)}
+.pred-card .p-val{font-family:var(--mono);font-size:1.2rem;font-weight:700;color:var(--text)}
+.pred-card .p-sub{font-size:.62rem;color:var(--muted);margin-top:.25rem;font-family:var(--mono)}
+.signal-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;
+  border-radius:20px;font-family:var(--mono);font-size:.78rem;font-weight:700}
+.signal-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+.sig-buy{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.sig-sell{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.sig-hold{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+.imp-bar-row{display:grid;grid-template-columns:120px 1fr 40px;align-items:center;gap:8px;margin-bottom:5px}
+.imp-label{font-family:var(--mono);font-size:.65rem;color:var(--muted2);text-align:right;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-bar-bg{background:var(--border);border-radius:3px;height:7px;overflow:hidden}
+.imp-bar-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .6s ease}
+.imp-val{font-family:var(--mono);font-size:.62rem;color:var(--muted)}
+.pred-loading{text-align:center;padding:3rem;color:var(--muted);font-size:.85rem}
+.spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent2);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto .75rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.info-chip{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:3px 9px;font-family:var(--mono);font-size:.65rem;color:var(--muted2)}
+.info-chip span{color:var(--text);font-weight:700}
+
+/* ── Tooltip ── */
+.tt{position:fixed;z-index:9999;pointer-events:none;max-width:280px;
+  background:var(--surface2);border:1px solid rgba(59,130,246,.3);border-radius:8px;
+  padding:.6rem .75rem;opacity:0;transition:opacity .12s;font-size:.7rem;line-height:1.55;
+  color:var(--muted2);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tt.show{opacity:1}
+.tt-title{font-weight:600;color:var(--accent2);margin-bottom:3px;font-family:var(--mono);font-size:.68rem}
+.tt-formula{font-family:var(--mono);font-size:.6rem;color:var(--purple);
+  margin-top:4px;padding-top:4px;border-top:1px solid var(--border);word-break:break-all}
+.info-icon{width:13px;height:13px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
+  font-size:.58rem;display:inline-flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     FIXED TOP HEADER
+══════════════════════════════════════════ -->
+<div id="top-header">
+  <div style="display:flex;align-items:center">
+    <div class="logo">AAPL<span>.analytics</span></div>
+    <div class="badge">1H · 60D · Random Forest</div>
+  </div>
+  <div class="hright">
+    <div class="live-dot"></div>
+    <div id="last-updated">—</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     STICKY SECTION NAV
+══════════════════════════════════════════ -->
+<nav id="section-nav">
+  <button class="snav-btn active" onclick="scrollToSection('s-overview',this)">
+    <span class="snav-num">1</span> Overview
+  </button>
+  <button class="snav-btn" onclick="scrollToSection('s-analysis',this)">
+    <span class="snav-num">2</span> Analysis
+  </button>
+  <button class="snav-btn" onclick="scrollToSection('s-modeling',this)">
+    <span class="snav-num">3</span> Modeling
+  </button>
+  <button class="snav-btn" onclick="scrollToSection('s-prediction',this)">
+    <span class="snav-num">4</span> Prediction
+  </button>
+  <button id="sb-toggle" onclick="toggleSidebar()">⇄ Filters</button>
+</nav>
+
+<!-- ══════════════════════════════════════════
+     BODY
+══════════════════════════════════════════ -->
+<div id="body-wrap">
+
+  <!-- ── SIDEBAR ── -->
+  <div id="sidebar">
+
+    <div>
+      <div class="sb-section-title">Quick Range</div>
+      <div class="qrange">
+        <button class="qr-btn" onclick="setQuickRange(7,this)">7D</button>
+        <button class="qr-btn" onclick="setQuickRange(14,this)">14D</button>
+        <button class="qr-btn active" onclick="setQuickRange(30,this)">30D</button>
+        <button class="qr-btn" onclick="setQuickRange(60,this)">60D</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="sb-section-title">Date Range</div>
+      <div class="sb-row">
+        <label class="sb-label">From</label>
+        <input type="date" id="f-from"/>
+      </div>
+      <div class="sb-row" style="margin-top:5px">
+        <label class="sb-label">To</label>
+        <input type="date" id="f-to"/>
+      </div>
+      <button class="apply-btn" onclick="applyFilters()">Apply</button>
+      <button class="reset-btn" onclick="resetFilters()">Reset</button>
+    </div>
+
+    <div>
+      <div class="sb-section-title">Chart Overlays</div>
+      <div class="cb-group">
+        <label class="cb-item"><input type="checkbox" id="ov-ma5" checked onchange="toggleOverlay()"><span>MA 5</span></label>
+        <label class="cb-item"><input type="checkbox" id="ov-sma10" checked onchange="toggleOverlay()"><span>SMA 10</span></label>
+        <label class="cb-item"><input type="checkbox" id="ov-ema10" checked onchange="toggleOverlay()"><span>EMA 10</span></label>
+        <label class="cb-item"><input type="checkbox" id="ov-bb" onchange="toggleOverlay()"><span>Bollinger Bands</span></label>
+      </div>
+    </div>
+
+    <div>
+      <div class="sb-section-title">RSI Thresholds</div>
+      <div class="sb-row">
+        <label class="sb-label">Overbought: <span id="ob-val">70</span></label>
+        <input type="range" id="rsi-ob" min="60" max="90" value="70" style="width:100%;accent-color:var(--red)"
+          oninput="document.getElementById('ob-val').textContent=this.value"/>
+      </div>
+      <div class="sb-row" style="margin-top:5px">
+        <label class="sb-label">Oversold: <span id="os-val">30</span></label>
+        <input type="range" id="rsi-os" min="10" max="40" value="30" style="width:100%;accent-color:var(--green)"
+          oninput="document.getElementById('os-val').textContent=this.value"/>
+      </div>
+      <button class="apply-btn" onclick="reloadRSI()">Update RSI</button>
+    </div>
+
+    <div>
+      <div class="sb-section-title">Signal Threshold</div>
+      <div class="sb-row">
+        <label class="sb-label">BUY/SELL (%): <span id="th-val">0.15</span></label>
+        <input type="range" id="pred-threshold" min="0.05" max="1.0" step="0.05" value="0.15"
+          style="width:100%;accent-color:var(--accent)"
+          oninput="document.getElementById('th-val').textContent=parseFloat(this.value).toFixed(2)"/>
+      </div>
+      <p style="font-size:.62rem;color:var(--muted);margin-top:4px;line-height:1.55">
+        Return &gt; threshold → BUY<br>Return &lt; −threshold → SELL<br>Otherwise → HOLD
+      </p>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ── SCROLL CONTENT ── -->
+  <div id="scroll-content">
+
+    <!-- ════════════════════════════════════════
+         SECTION 1 — OVERVIEW
+    ════════════════════════════════════════ -->
+    <section class="section" id="s-overview">
+      <div class="section-heading">
+        <div class="section-num">1</div>
+        <div class="section-title">Overview</div>
+        <div class="section-sub">Key metrics · Price · Volume</div>
+      </div>
+
+      <!-- KPI cards -->
+      <div class="metrics-row">
+        <div class="metric-card"><div class="metric-label">Price <span class="info-icon" data-tip="price">i</span></div><div class="metric-value" id="m-price">—</div><div class="metric-sub" id="m-chg">—</div></div>
+        <div class="metric-card"><div class="metric-label">RSI 14 <span class="info-icon" data-tip="rsi">i</span></div><div class="metric-value" id="m-rsi">—</div><div class="metric-sub" id="m-rsi-sig">—</div></div>
+        <div class="metric-card"><div class="metric-label">1h Return <span class="info-icon" data-tip="return">i</span></div><div class="metric-value" id="m-ret">—</div><div class="metric-sub">latest bar</div></div>
+        <div class="metric-card"><div class="metric-label">BB Width <span class="info-icon" data-tip="bbwidth">i</span></div><div class="metric-value" id="m-bbw">—</div><div class="metric-sub">volatility proxy</div></div>
+        <div class="metric-card"><div class="metric-label">Momentum (5) <span class="info-icon" data-tip="momentum">i</span></div><div class="metric-value" id="m-mom">—</div><div class="metric-sub">5-bar diff</div></div>
+        <div class="metric-card"><div class="metric-label">Trend <span class="info-icon" data-tip="slope">i</span></div><div class="metric-value" id="m-trend">—</div><div class="metric-sub" id="m-slope">—</div></div>
+        <div class="metric-card"><div class="metric-label">MA5 vs EMA10 <span class="info-icon" data-tip="cross">i</span></div><div class="metric-value" id="m-cross">—</div><div class="metric-sub">crossover</div></div>
+        <div class="metric-card"><div class="metric-label">Bars</div><div class="metric-value" style="font-size:.85rem" id="m-rows">—</div><div class="metric-sub" id="m-dates">—</div></div>
+      </div>
+
+      <!-- Price chart -->
+      <div class="chart-card">
+        <div class="chart-title">
+          Close Price + Moving Averages
+          <span class="info-icon" data-tip="sma">i</span>
+          <div class="legend" style="margin-left:auto;margin-bottom:0">
+            <div class="legend-item" id="leg-ma5"><div class="legend-dot" style="background:#f59e0b"></div>MA5</div>
+            <div class="legend-item" id="leg-sma10"><div class="legend-dot" style="background:#22c55e"></div>SMA10</div>
+            <div class="legend-item" id="leg-ema10"><div class="legend-dot" style="background:#a78bfa"></div>EMA10</div>
+            <div class="legend-item" id="leg-bb" style="display:none"><div class="legend-dot" style="background:#ef4444"></div>BB</div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:300px"><canvas id="chart-price"></canvas></div>
+        <div class="analysis-box" id="ab-price"><div class="ab-title">Chart Analysis</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+      <!-- Volume chart -->
+      <div class="chart-card">
+        <div class="chart-title">Volume (Millions)</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="chart-volume"></canvas></div>
+        <div class="analysis-box" id="ab-volume"><div class="ab-title">Volume Analysis</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════
+         SECTION 2 — ANALYSIS
+    ════════════════════════════════════════ -->
+    <section class="section" id="s-analysis">
+      <div class="section-heading">
+        <div class="section-num">2</div>
+        <div class="section-title">Analysis</div>
+        <div class="section-sub">Returns · RSI · Bollinger Bands · Momentum</div>
+      </div>
+
+      <!-- Returns -->
+      <div class="chart-card">
+        <div class="chart-title">1-Hour Returns (%) <span class="info-icon" data-tip="return">i</span></div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chart-returns"></canvas></div>
+        <div class="analysis-box" id="ab-returns"><div class="ab-title">Returns Analysis</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+      <!-- RSI -->
+      <div class="chart-card">
+        <div class="chart-title">RSI (14) — Relative Strength Index <span class="info-icon" data-tip="rsi">i</span></div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chart-rsi"></canvas></div>
+        <div class="analysis-box" id="ab-rsi"><div class="ab-title">RSI Analysis</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+      <!-- Bollinger Bands -->
+      <div class="chart-card">
+        <div class="chart-title">
+          Bollinger Bands (MA5 ± 2σ) <span class="info-icon" data-tip="bollinger">i</span>
+          <div class="legend" style="margin-left:auto;margin-bottom:0">
+            <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Upper</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Close</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Lower</div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:260px"><canvas id="chart-bollinger"></canvas></div>
+        <div class="analysis-box" id="ab-bollinger"><div class="ab-title">Bollinger Analysis</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+      <!-- Momentum -->
+      <div class="two-col">
+        <div class="chart-card">
+          <div class="chart-title">Momentum (5-bar) <span class="info-icon" data-tip="momentum">i</span></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-momentum"></canvas></div>
+          <div class="analysis-box" id="ab-momentum"><div class="ab-title">Momentum Analysis</div><div class="ab-text">Loading…</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Rolling Max / Min (5-bar)</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-rollrange"></canvas></div>
+          <div class="analysis-box" id="ab-rollrange"><div class="ab-title">Range Analysis</div><div class="ab-text">Loading…</div></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════
+         SECTION 3 — MODELING
+    ════════════════════════════════════════ -->
+    <section class="section" id="s-modeling">
+      <div class="section-heading">
+        <div class="section-num">3</div>
+        <div class="section-title">Modeling</div>
+        <div class="section-sub">Feature engineering · EDA · Missing values</div>
+      </div>
+
+      <!-- Feature table -->
+      <div class="chart-card">
+        <div class="chart-title">Feature Values — Latest Bar</div>
+        <div class="feat-filters">
+          <button class="filter-btn active" onclick="filterFeatures('all',this)">All</button>
+          <button class="filter-btn" onclick="filterFeatures('Price',this)">Price</button>
+          <button class="filter-btn" onclick="filterFeatures('Return',this)">Return</button>
+          <button class="filter-btn" onclick="filterFeatures('Lag',this)">Lag</button>
+          <button class="filter-btn" onclick="filterFeatures('Moving Avg',this)">Moving Avg</button>
+          <button class="filter-btn" onclick="filterFeatures('Bollinger',this)">Bollinger</button>
+          <button class="filter-btn" onclick="filterFeatures('Momentum',this)">Momentum</button>
+          <button class="filter-btn" onclick="filterFeatures('Oscillator',this)">Oscillator</button>
+          <button class="filter-btn" onclick="filterFeatures('Volatility',this)">Volatility</button>
+          <button class="filter-btn" onclick="filterFeatures('Trend',this)">Trend</button>
+          <button class="filter-btn" onclick="filterFeatures('Candle',this)">Candle</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="feat-table">
+            <thead><tr><th>Feature</th><th>Value</th><th>Category</th><th>Definition</th></tr></thead>
+            <tbody id="feat-tbody"></tbody>
+          </table>
+        </div>
+        <div class="analysis-box" id="ab-features" style="margin-top:.875rem"><div class="ab-title">Feature Engineering Summary</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+      <!-- Missing values -->
+      <div class="chart-card">
+        <div class="chart-title">Missing Values per Feature</div>
+        <div id="miss-bars" class="miss-bar-wrap" style="margin-top:.5rem"></div>
+        <div class="analysis-box" id="ab-missing" style="margin-top:.875rem"><div class="ab-title">Data Quality</div><div class="ab-text">Loading…</div></div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════
+         SECTION 4 — PREDICTION
+    ════════════════════════════════════════ -->
+    <section class="section" id="s-prediction">
+      <div class="section-heading">
+        <div class="section-num">4</div>
+        <div class="section-title">Prediction</div>
+        <div class="section-sub">Random Forest · MAE · RMSE · Signal</div>
+      </div>
+
+      <div id="pred-loading" class="pred-loading">
+        <div class="spinner"></div>Training Random Forest…<br>
+        <span style="font-size:.7rem;color:var(--muted);margin-top:4px;display:block">This may take a few seconds</span>
+      </div>
+
+      <div id="pred-content" style="display:none">
+
+        <!-- Signal + metrics -->
+        <div class="chart-card">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:.875rem">
+            <div class="chart-title" style="margin-bottom:0">Model Signal</div>
+            <div id="pred-signal-badge"></div>
+          </div>
+          <div class="pred-grid">
+            <div class="pred-card"><div class="p-label">Predicted Next Close <span class="info-icon" data-tip="pred-next">i</span></div><div class="p-val" id="pred-next">—</div><div class="p-sub" id="pred-ret-sub">—</div></div>
+            <div class="pred-card"><div class="p-label">Last Close</div><div class="p-val" id="pred-last">—</div><div class="p-sub">actual price</div></div>
+            <div class="pred-card"><div class="p-label">MAE <span class="info-icon" data-tip="mae">i</span></div><div class="p-val" id="pred-mae">—</div><div class="p-sub">mean absolute error</div></div>
+            <div class="pred-card"><div class="p-label">RMSE <span class="info-icon" data-tip="rmse">i</span></div><div class="p-val" id="pred-rmse">—</div><div class="p-sub">root mean squared error</div></div>
+            <div class="pred-card"><div class="p-label">Dir. Accuracy <span class="info-icon" data-tip="diracc">i</span></div><div class="p-val" id="pred-dacc">—</div><div class="p-sub">% correct direction</div></div>
+            <div class="pred-card"><div class="p-label">Train / Test</div><div class="p-val" id="pred-split">—</div><div class="p-sub">80/20 time-series split</div></div>
+          </div>
+          <div id="pred-info-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.5rem"></div>
+          <div class="analysis-box" id="ab-signal"><div class="ab-title">Signal Interpretation</div><div class="ab-text">Loading…</div></div>
+        </div>
+
+        <!-- Actual vs predicted -->
+        <div class="chart-card">
+          <div class="chart-title">
+            Actual vs Predicted Price (Test Set)
+            <div class="legend" style="margin-left:auto;margin-bottom:0">
+              <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Actual</div>
+              <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Predicted</div>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:280px"><canvas id="chart-pred"></canvas></div>
+          <div class="analysis-box" id="ab-pred-chart"><div class="ab-title">Model Performance</div><div class="ab-text">Loading…</div></div>
+        </div>
+
+        <!-- Feature importances -->
+        <div class="chart-card">
+          <div class="chart-title">Feature Importances (Random Forest) <span class="info-icon" data-tip="importance">i</span></div>
+          <div id="imp-bars" style="margin-top:.25rem"></div>
+          <div class="analysis-box" id="ab-importance"><div class="ab-title">Feature Importance Insights</div><div class="ab-text">Loading…</div></div>
+        </div>
+
+      </div><!-- /pred-content -->
+    </section>
+
+  </div><!-- /scroll-content -->
+</div><!-- /body-wrap -->
+
+<!-- TOOLTIP -->
+<div class="tt" id="tooltip"><div class="tt-title" id="tt-title"></div><div id="tt-body"></div><div class="tt-formula" id="tt-formula"></div></div>
+
+<script>
+// ════════════════════════════════════════════
+// TOOLTIP DEFINITIONS
+// ════════════════════════════════════════════
+const TIPS = {
+  price:      {title:"Close Price",           body:"Final transaction price of AAPL for a given 1-hour candle. Primary target variable for the prediction model.",formula:"Ct"},
+  rsi:        {title:"RSI — Relative Strength Index",body:"Momentum oscillator measuring speed and magnitude of price changes. >70 = overbought, <30 = oversold.",formula:"RSI = 100 − 100/(1 + AvgGain/AvgLoss)  [14-period]"},
+  return:     {title:"Simple Return (1h)",    body:"Percentage price change from the previous 1-hour candle. Core return feature used as input and as the basis for lagged features.",formula:"Rt = (Ct − Ct−1) / Ct−1"},
+  logret:     {title:"Log Return",            body:"Natural logarithm of the price ratio between consecutive periods. More statistically stable than simple returns; additive over time.",formula:"rt = ln(Ct / Ct−1)"},
+  bbwidth:    {title:"Bollinger Band Width",  body:"Distance between upper and lower Bollinger Bands, normalised by the moving average. High = high volatility; Low = price consolidation.",formula:"Width = (Upper − Lower) / SMA"},
+  bollinger:  {title:"Bollinger Bands",       body:"Volatility envelope placed ±2 standard deviations around a 5-period MA. Price at upper band may signal overbought; lower band oversold.",formula:"Upper = SMA5 + 2σ   Lower = SMA5 − 2σ"},
+  momentum:   {title:"Momentum (5-bar)",      body:"Absolute price change over the last 5 bars. Positive = upward momentum. Detects acceleration in price trends.",formula:"Momentumt = Ct − Ct−5"},
+  slope:      {title:"Trend Slope",           body:"Linear regression slope over a 10-bar rolling window. Positive = uptrend; negative = downtrend.",formula:"Slope = [n·Σ(t·Ct) − Σt·ΣCt] / [n·Σt² − (Σt)²]"},
+  cross:      {title:"MA Crossover Signal",   body:"Compares MA5 to EMA10. MA5 > EMA10 means short-term price is above long-term trend — a bullish signal.",formula:"Bullish: MA5 > EMA10  |  Bearish: MA5 ≤ EMA10"},
+  atr:        {title:"ATR — Average True Range",body:"Measures volatility: greatest of High−Low, |High−PrevClose|, |Low−PrevClose|. 3-day average applied.",formula:"ATR3 = (1/3)·Σ TR  where TR = max(H−L, |H−Cp|, |L−Cp|)"},
+  sma:        {title:"SMA — Simple Moving Average",body:"Arithmetic mean of closing price over last n periods. Identifies trend and acts as dynamic support/resistance.",formula:"SMAt = (1/n)·Σ Ct−i"},
+  ema:        {title:"EMA — Exponential Moving Average",body:"Weighted moving average giving more importance to recent prices. Reacts faster to changes than SMA.",formula:"EMAt = α·Ct + (1−α)·EMAt−1   α = 2/(n+1)"},
+  var:        {title:"Rolling Variance",      body:"Statistical dispersion of returns over a rolling window. Key volatility feature from the project (§3.2).",formula:"Vart = (1/n)·Σ(Rt−i − R̄t)²"},
+  intradayvar:{title:"Intraday Variance",     body:"Variance of hourly returns within an 8-bar rolling window. Differentiates stable vs volatile daily trends.",formula:"8-hour rolling window of hourly returns"},
+  lag:        {title:"Lag Features",          body:"Previous closing prices shifted by 1, 2, and 3 bars. Give the model recent price history without look-ahead bias.",formula:"Lag1=Ct−1, Lag2=Ct−2, Lag3=Ct−3"},
+  hlrange:    {title:"High-Low Range",        body:"Normalised candle range. High values indicate volatile or wide-ranging candles.",formula:"(Hight − Lowt) / Closet"},
+  occhange:   {title:"Open-Close Change",     body:"Directional move within a single candle as a fraction of the open price. Positive = bullish candle.",formula:"(Closet − Opent) / Opent"},
+  "pred-next":{title:"Predicted Next Close",  body:"Random Forest model's forecast for the next 1-hour closing price, trained on 80% of data using 21 features.",formula:"ŷ = RF(Close, RSI, MA, BB, Momentum, …)"},
+  mae:        {title:"MAE — Mean Absolute Error",body:"Average absolute difference between predicted and actual prices on the test set. Lower is better.",formula:"MAE = (1/n)·Σ|yi − ŷi|"},
+  rmse:       {title:"RMSE — Root Mean Squared Error",body:"Square root of average squared prediction errors. More sensitive to large errors than MAE.",formula:"RMSE = √[(1/n)·Σ(yi − ŷi)²]"},
+  diracc:     {title:"Directional Accuracy",  body:"Percentage of test bars where the model correctly predicted price direction (up or down). More meaningful than RMSE for trading.",formula:"Dir.Acc = #{sign(Δy)=sign(Δŷ)} / n · 100%"},
+  importance: {title:"Feature Importances",   body:"How much each feature contributed to Random Forest predictions (mean impurity decrease). Higher = more influential.",formula:"Σ importances = 100%"},
+};
+const FEAT_TIPS = {
+  "Close":"price","Target (next)":"pred-next","Return 1h":"return","Log Return":"logret",
+  "Close Lag 1":"lag","Close Lag 2":"lag","Close Lag 3":"lag",
+  "HL Range":"hlrange","OC Change":"occhange",
+  "MA 5":"sma","SMA 10":"sma","EMA 10":"ema",
+  "Std 5":"var","Var 5":"var","Intraday Var":"intradayvar",
+  "BB Upper":"bollinger","BB Lower":"bollinger","BB Width":"bbwidth",
+  "Momentum 5":"momentum","Roll Max 5":"momentum","Roll Min 5":"momentum",
+  "RSI 14":"rsi","Slope 10":"slope","ATR 3 (daily)":"atr",
+};
+
+// ── Tooltip engine ──
+const tt=document.getElementById('tooltip');
+document.addEventListener('mouseover',e=>{
+  const el=e.target.closest('[data-tip]');
+  if(el){const tip=TIPS[el.dataset.tip];if(!tip)return;
+    document.getElementById('tt-title').textContent=tip.title;
+    document.getElementById('tt-body').textContent=tip.body;
+    const f=document.getElementById('tt-formula');
+    f.textContent=tip.formula||'';f.style.display=tip.formula?'':'none';
+    pos(e);tt.classList.add('show');}
+});
+document.addEventListener('mousemove',e=>{if(tt.classList.contains('show'))pos(e);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('[data-tip]'))tt.classList.remove('show');});
+function pos(e){
+  const x=e.clientX,y=e.clientY,w=tt.offsetWidth||280,h=tt.offsetHeight||100;
+  tt.style.left=(x+14+w>window.innerWidth?x-w-10:x+14)+'px';
+  tt.style.top=(y-10+h>window.innerHeight?y-h:y-10)+'px';
+}
+
+// ════════════════════════════════════════════
+// SIDEBAR TOGGLE
+// ════════════════════════════════════════════
+let sidebarOpen=true;
+function toggleSidebar(){
+  sidebarOpen=!sidebarOpen;
+  document.getElementById('sidebar').classList.toggle('hidden',!sidebarOpen);
+  setTimeout(()=>Object.values(charts).forEach(c=>c&&c.resize()),280);
+}
+
+// ════════════════════════════════════════════
+// SCROLL SPY — highlight active section in nav
+// ════════════════════════════════════════════
+const sectionIds=['s-overview','s-analysis','s-modeling','s-prediction'];
+const sc=document.getElementById('scroll-content');
+sc.addEventListener('scroll',()=>{
+  const offset=40;
+  let active='s-overview';
+  for(const id of sectionIds){
+    const el=document.getElementById(id);
+    if(el&&el.getBoundingClientRect().top-sc.getBoundingClientRect().top<offset) active=id;
+  }
+  document.querySelectorAll('.snav-btn').forEach((b,i)=>{
+    b.classList.toggle('active',sectionIds[i]===active);
+  });
+});
+
+function scrollToSection(id,btn){
+  const el=document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelectorAll('.snav-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+// ════════════════════════════════════════════
+// FILTER STATE
+// ════════════════════════════════════════════
+let filterParams={};
+function buildParams(){const p=new URLSearchParams(filterParams);return p.toString()?'?'+p.toString():'';}
+function applyFilters(){
+  const from=document.getElementById('f-from').value;
+  const to=document.getElementById('f-to').value;
+  filterParams={};
+  if(from) filterParams.from=from;
+  if(to)   filterParams.to=to;
+  reloadAll();
+}
+function resetFilters(){
+  filterParams={};
+  document.getElementById('f-from').value='';
+  document.getElementById('f-to').value='';
+  document.querySelectorAll('.qr-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.qr-btn:nth-child(3)').classList.add('active');
+  reloadAll();
+}
+function setQuickRange(days,btn){
+  document.querySelectorAll('.qr-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const to=new Date(),from=new Date();
+  from.setDate(from.getDate()-days);
+  document.getElementById('f-from').value=from.toISOString().slice(0,10);
+  document.getElementById('f-to').value=to.toISOString().slice(0,10);
+  filterParams={from:from.toISOString().slice(0,10),to:to.toISOString().slice(0,10)};
+  reloadAll();
+}
+async function reloadAll(){
+  await loadSummary();
+  await Promise.all([loadPrice(),loadVolume(),loadReturns(),loadRSI(),loadBollinger(),loadMomentum()]);
+  await loadFeatures();
+  await loadMissing();
+}
+function reloadRSI(){loadRSI();}
+
+// ════════════════════════════════════════════
+// CHART HELPERS
+// ════════════════════════════════════════════
+const charts={};
+const BASE={
+  responsive:true,maintainAspectRatio:false,animation:false,
+  interaction:{mode:'index',intersect:false},
+  plugins:{legend:{display:false},tooltip:{
+    backgroundColor:'#181c24',borderColor:'#1e2330',borderWidth:1,
+    titleColor:'#94a3b8',bodyColor:'#e2e8f0',padding:10,
+    titleFont:{family:'Space Mono',size:10},bodyFont:{family:'Space Mono',size:11}
+  }},
+  scales:{
+    x:{ticks:{color:'#475569',maxTicksLimit:10,maxRotation:0,font:{family:'Space Mono',size:10}},grid:{color:'rgba(30,35,48,.8)'}},
+    y:{ticks:{color:'#475569',font:{family:'Space Mono',size:10}},grid:{color:'rgba(30,35,48,.8)'}}
+  }
+};
+function mo(extra={}){return mergeDeep(JSON.parse(JSON.stringify(BASE)),extra);}
+function mergeDeep(t,s){for(const k in s){if(s[k]&&typeof s[k]==='object'&&!Array.isArray(s[k]))t[k]=mergeDeep(t[k]||{},s[k]);else t[k]=s[k];}return t;}
+function destroy(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+// ════════════════════════════════════════════
+// DYNAMIC ANALYSIS HELPER
+// ════════════════════════════════════════════
+function setAnalysis(id,html){
+  const box=document.getElementById(id);
+  if(!box) return;
+  box.querySelector('.ab-text').innerHTML=html;
+}
+function chip(label,cls=''){return `<span class="ab-chip ${cls}">${label}</span>`;}
+
+// ════════════════════════════════════════════
+// SUMMARY / KPI
+// ════════════════════════════════════════════
+async function loadSummary(){
+  const d=await fetch('/api/summary'+buildParams()).then(r=>r.json());
+  if(d.error){console.error(d.error);return;}
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  const cls=(id,up)=>{const e=document.getElementById(id);if(e){e.classList.toggle('up',up);e.classList.toggle('down',!up);}};
+  const p=d.price??0,chg=d.pct_change??0;
+  set('m-price','$'+p.toFixed(2));set('m-chg',(chg>=0?'+':'')+chg.toFixed(3)+'%');cls('m-price',chg>=0);
+  const rsi=d.rsi??50;set('m-rsi',rsi.toFixed(1));
+  const rsiSig=rsi>70?'Overbought':rsi<30?'Oversold':'Neutral';
+  set('m-rsi-sig',rsiSig);cls('m-rsi',rsi>=30&&rsi<=70);
+  const ret=d.return_1h??0;set('m-ret',(ret>=0?'+':'')+ret.toFixed(4)+'%');cls('m-ret',ret>=0);
+  set('m-bbw',d.bb_width!=null?d.bb_width.toFixed(5):'N/A');
+  const mom=d.momentum??0;set('m-mom',(mom>=0?'+':'')+mom.toFixed(2));cls('m-mom',mom>=0);
+  const sl=d.slope_10??0;set('m-trend',sl>=0?'Uptrend':'Downtrend');cls('m-trend',sl>=0);
+  set('m-slope','slope: '+(sl>=0?'+':'')+sl.toFixed(4));
+  const ma5=d.ma5??0,ema10=d.ema10??0;
+  set('m-cross',ma5>ema10?'Bullish':'Bearish');cls('m-cross',ma5>ema10);
+  set('m-rows',d.total_rows+' bars');set('m-dates',d.date_min+' → '+d.date_max);
+  set('last-updated',new Date().toLocaleTimeString());
+  window._summary=d;
+}
+
+// ════════════════════════════════════════════
+// PRICE CHART
+// ════════════════════════════════════════════
+async function loadPrice(){
+  const d=await fetch('/api/chart/price'+buildParams()).then(r=>r.json());
+  if(d.error){console.error(d.error);return;}
+  destroy('price');
+  charts['price']=new Chart(document.getElementById('chart-price'),{
+    type:'line',data:{labels:d.labels,datasets:[
+      {label:'Close', data:d.close,  borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:.2,fill:false},
+      {label:'MA5',   data:d.ma5,   borderColor:'#f59e0b',borderWidth:1,  pointRadius:0,tension:.2,fill:false,borderDash:[3,3],hidden:!document.getElementById('ov-ma5').checked},
+      {label:'SMA10', data:d.sma10, borderColor:'#22c55e',borderWidth:1,  pointRadius:0,tension:.2,fill:false,borderDash:[5,5],hidden:!document.getElementById('ov-sma10').checked},
+      {label:'EMA10', data:d.ema10, borderColor:'#a78bfa',borderWidth:1,  pointRadius:0,tension:.2,fill:false,borderDash:[2,4],hidden:!document.getElementById('ov-ema10').checked},
+      {label:'BB Up', data:d.bb_upper,borderColor:'rgba(239,68,68,.45)',borderWidth:.8,pointRadius:0,tension:.2,fill:'+1',backgroundColor:'rgba(239,68,68,.04)',hidden:!document.getElementById('ov-bb').checked},
+      {label:'BB Lo', data:d.bb_lower,borderColor:'rgba(34,197,94,.45)', borderWidth:.8,pointRadius:0,tension:.2,fill:false,hidden:!document.getElementById('ov-bb').checked},
+    ]},options:mo()
+  });
+  // Dynamic analysis
+  const close=d.close.filter(v=>v!=null);
+  if(close.length<2){setAnalysis('ab-price','Not enough data.');return;}
+  const last=close[close.length-1],first=close[0];
+  const pct=((last-first)/first*100).toFixed(2);
+  const ma5=d.ma5.filter(v=>v!=null),ema10=d.ema10.filter(v=>v!=null);
+  const lastMa5=ma5[ma5.length-1],lastEma10=ema10[ema10.length-1];
+  const cross=lastMa5>lastEma10?'bullish':'bearish';
+  const trendDir=last>first?'upward':'downward';
+  const max=Math.max(...close),min=Math.min(...close);
+  setAnalysis('ab-price',
+    `Price moved <strong>${pct>=0?'+':''}${pct}%</strong> over the selected period, from 
+     <strong>$${first.toFixed(2)}</strong> to <strong>$${last.toFixed(2)}</strong>. 
+     The range spans <strong>$${min.toFixed(2)} – $${max.toFixed(2)}</strong>. 
+     MA5 vs EMA10 indicates a <strong>${cross}</strong> crossover signal, 
+     suggesting a <strong>${trendDir}</strong> short-term trend.
+     <div class="ab-chips">
+       ${chip('Range: $'+(max-min).toFixed(2))}
+       ${chip(cross==='bullish'?'MA5 > EMA10 ↑':'MA5 < EMA10 ↓',cross==='bullish'?'bull':'bear')}
+       ${chip(trendDir==='upward'?'Uptrend':'Downtrend',trendDir==='upward'?'bull':'bear')}
+     </div>`
+  );
+}
+
+function toggleOverlay(){
+  if(!charts['price'])return;
+  const ds=charts['price'].data.datasets;
+  ds[1].hidden=!document.getElementById('ov-ma5').checked;
+  ds[2].hidden=!document.getElementById('ov-sma10').checked;
+  ds[3].hidden=!document.getElementById('ov-ema10').checked;
+  ds[4].hidden=!document.getElementById('ov-bb').checked;
+  ds[5].hidden=!document.getElementById('ov-bb').checked;
+  charts['price'].update();
+  document.getElementById('leg-ma5').style.opacity=ds[1].hidden?'.3':'1';
+  document.getElementById('leg-sma10').style.opacity=ds[2].hidden?'.3':'1';
+  document.getElementById('leg-ema10').style.opacity=ds[3].hidden?'.3':'1';
+  document.getElementById('leg-bb').style.display=ds[4].hidden?'none':'flex';
+}
+
+// ════════════════════════════════════════════
+// VOLUME
+// ════════════════════════════════════════════
+async function loadVolume(){
+  const d=await fetch('/api/chart/volume'+buildParams()).then(r=>r.json());
+  if(d.error)return;
+  destroy('volume');
+  charts['volume']=new Chart(document.getElementById('chart-volume'),{
+    type:'bar',data:{labels:d.labels,datasets:[{label:'Volume (M)',data:d.volume,backgroundColor:'rgba(59,130,246,.45)',borderWidth:0}]},
+    options:mo()
+  });
+  const vol=d.volume.filter(v=>v!=null);
+  const avg=(vol.reduce((a,b)=>a+b,0)/vol.length).toFixed(2);
+  const maxV=Math.max(...vol).toFixed(2),lastV=vol[vol.length-1].toFixed(2);
+  const volSignal=parseFloat(lastV)>parseFloat(avg)*1.3?'high':'normal';
+  setAnalysis('ab-volume',
+    `Average hourly volume over the period: <strong>${avg}M shares</strong>. 
+     Peak volume reached <strong>${maxV}M</strong>. 
+     The most recent bar shows <strong>${lastV}M</strong> — 
+     ${volSignal==='high'?'<strong>above average</strong>, suggesting elevated market activity.':'within the normal range.'}
+     <div class="ab-chips">
+       ${chip('Avg: '+avg+'M')}${chip('Peak: '+maxV+'M')}
+       ${chip(volSignal==='high'?'High activity':'Normal volume',volSignal==='high'?'warn':'')}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// RETURNS
+// ════════════════════════════════════════════
+async function loadReturns(){
+  const d=await fetch('/api/chart/returns'+buildParams()).then(r=>r.json());
+  if(d.error)return;
+  destroy('returns');
+  charts['returns']=new Chart(document.getElementById('chart-returns'),{
+    type:'bar',data:{labels:d.labels,datasets:[{label:'1h Return %',data:d.returns,backgroundColor:d.colors,borderWidth:0}]},
+    options:mo()
+  });
+  const r=d.returns.filter(v=>v!=null);
+  const pos=r.filter(v=>v>0).length,neg=r.filter(v=>v<0).length;
+  const maxR=Math.max(...r).toFixed(4),minR=Math.min(...r).toFixed(4);
+  const avg=(r.reduce((a,b)=>a+b,0)/r.length).toFixed(5);
+  const winRate=(pos/r.length*100).toFixed(1);
+  setAnalysis('ab-returns',
+    `Out of <strong>${r.length} bars</strong>, <strong>${pos} were positive</strong> (${winRate}% win rate) and 
+     <strong>${neg} were negative</strong>. The best return was <strong>+${maxR}%</strong> and 
+     the worst was <strong>${minR}%</strong>. The average 1h return is <strong>${avg}%</strong>.
+     <div class="ab-chips">
+       ${chip('Win rate: '+winRate+'%',parseFloat(winRate)>50?'bull':'bear')}
+       ${chip('Best: +'+maxR+'%','bull')}${chip('Worst: '+minR+'%','bear')}
+       ${chip('Mean: '+avg+'%')}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// RSI
+// ════════════════════════════════════════════
+async function loadRSI(){
+  const d=await fetch('/api/chart/rsi'+buildParams()).then(r=>r.json());
+  if(d.error)return;
+  const ob=+document.getElementById('rsi-ob').value;
+  const os=+document.getElementById('rsi-os').value;
+  const n=d.labels.length;
+  destroy('rsi');
+  charts['rsi']=new Chart(document.getElementById('chart-rsi'),{
+    type:'line',data:{labels:d.labels,datasets:[
+      {label:'RSI 14',    data:d.rsi,           borderColor:'#a78bfa',borderWidth:1.5,pointRadius:0,tension:.2,fill:false},
+      {label:'Overbought',data:Array(n).fill(ob),borderColor:'rgba(239,68,68,.5)',borderWidth:1,pointRadius:0,fill:false,borderDash:[4,4]},
+      {label:'Oversold',  data:Array(n).fill(os),borderColor:'rgba(34,197,94,.5)', borderWidth:1,pointRadius:0,fill:false,borderDash:[4,4]},
+    ]},options:mo({scales:{y:{min:0,max:100}}})
+  });
+  const rsi=d.rsi.filter(v=>v!=null);
+  const last=rsi[rsi.length-1];
+  const overbought=rsi.filter(v=>v>ob).length;
+  const oversold=rsi.filter(v=>v<os).length;
+  const avg=(rsi.reduce((a,b)=>a+b,0)/rsi.length).toFixed(1);
+  const zone=last>ob?'overbought':last<os?'oversold':'neutral';
+  const zoneCls=zone==='overbought'?'bear':zone==='oversold'?'bull':'';
+  setAnalysis('ab-rsi',
+    `Current RSI is <strong>${last.toFixed(1)}</strong> — currently in the <strong>${zone}</strong> zone 
+     (thresholds: ${os}/${ob}). Over the selected period, the price was overbought 
+     <strong>${overbought} times</strong> and oversold <strong>${oversold} times</strong>. 
+     Average RSI was <strong>${avg}</strong>.
+     <div class="ab-chips">
+       ${chip('Current: '+last.toFixed(1),zoneCls)}
+       ${chip('Avg: '+avg)}
+       ${chip('Overbought events: '+overbought,'bear')}
+       ${chip('Oversold events: '+oversold,'bull')}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// BOLLINGER
+// ════════════════════════════════════════════
+async function loadBollinger(){
+  const d=await fetch('/api/chart/bollinger'+buildParams()).then(r=>r.json());
+  if(d.error)return;
+  destroy('bollinger');
+  charts['bollinger']=new Chart(document.getElementById('chart-bollinger'),{
+    type:'line',data:{labels:d.labels,datasets:[
+      {label:'Upper BB',data:d.bb_upper,borderColor:'rgba(239,68,68,.65)',borderWidth:1,pointRadius:0,fill:'+2',backgroundColor:'rgba(239,68,68,.04)',tension:.2},
+      {label:'Close',   data:d.close,   borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,fill:false,tension:.2},
+      {label:'MA5',     data:d.ma5,     borderColor:'#f59e0b',borderWidth:1,  pointRadius:0,fill:false,tension:.2,borderDash:[3,3]},
+      {label:'Lower BB',data:d.bb_lower,borderColor:'rgba(34,197,94,.65)', borderWidth:1,pointRadius:0,fill:false,tension:.2},
+    ]},options:mo()
+  });
+  const close=d.close.filter(v=>v!=null);
+  const upper=d.bb_upper.filter(v=>v!=null);
+  const lower=d.bb_lower.filter(v=>v!=null);
+  const n=Math.min(close.length,upper.length,lower.length);
+  let touchUp=0,touchLo=0;
+  for(let i=0;i<n;i++){
+    if(close[i]>=upper[i]) touchUp++;
+    if(close[i]<=lower[i]) touchLo++;
+  }
+  const lastWidth=(upper[upper.length-1]-lower[lower.length-1]).toFixed(2);
+  const lastClose=close[close.length-1];
+  const lastU=upper[upper.length-1],lastL=lower[lower.length-1];
+  const pos=lastClose>lastU?'above upper band (overbought)':lastClose<lastL?'below lower band (oversold)':'inside the bands (neutral)';
+  setAnalysis('ab-bollinger',
+    `Price is currently <strong>${pos}</strong>. Band width is <strong>$${lastWidth}</strong>. 
+     Price touched or exceeded the upper band <strong>${touchUp} times</strong> 
+     and touched the lower band <strong>${touchLo} times</strong> in this period.
+     <div class="ab-chips">
+       ${chip('BB Width: $'+lastWidth)}
+       ${chip('Upper touches: '+touchUp,'bear')}${chip('Lower touches: '+touchLo,'bull')}
+       ${chip(lastClose>lastU?'Above upper':'Below lower'?lastClose<lastL:'Inside bands',lastClose>lastU?'bear':lastClose<lastL?'bull':'')}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// MOMENTUM
+// ════════════════════════════════════════════
+async function loadMomentum(){
+  const d=await fetch('/api/chart/momentum'+buildParams()).then(r=>r.json());
+  if(d.error)return;
+  destroy('momentum');
+  charts['momentum']=new Chart(document.getElementById('chart-momentum'),{
+    type:'bar',data:{labels:d.labels,datasets:[{label:'Momentum',data:d.momentum,backgroundColor:d.colors,borderWidth:0}]},
+    options:mo()
+  });
+  destroy('rollrange');
+  charts['rollrange']=new Chart(document.getElementById('chart-rollrange'),{
+    type:'line',data:{labels:d.labels,datasets:[
+      {label:'Roll Max',data:d.rolling_max,borderColor:'#22c55e',borderWidth:1.2,pointRadius:0,fill:'+1',backgroundColor:'rgba(59,130,246,.05)',tension:.2},
+      {label:'Roll Min',data:d.rolling_min,borderColor:'#ef4444',borderWidth:1.2,pointRadius:0,fill:false,tension:.2},
+    ]},options:mo()
+  });
+  const mom=d.momentum.filter(v=>v!=null);
+  const last=mom[mom.length-1];
+  const pos=mom.filter(v=>v>0).length,neg=mom.filter(v=>v<0).length;
+  const max=Math.max(...mom).toFixed(3),min=Math.min(...mom).toFixed(3);
+  setAnalysis('ab-momentum',
+    `Current 5-bar momentum is <strong>${last>=0?'+':''}${last.toFixed(3)}</strong>. 
+     Over the period, momentum was positive <strong>${pos} times</strong> and negative <strong>${neg} times</strong>. 
+     Peak momentum: <strong>+${max}</strong>, trough: <strong>${min}</strong>.
+     <div class="ab-chips">
+       ${chip('Current: '+(last>=0?'+':'')+last.toFixed(3),last>=0?'bull':'bear')}
+       ${chip('Positive: '+pos,'bull')}${chip('Negative: '+neg,'bear')}
+     </div>`
+  );
+  const rmax=d.rolling_max.filter(v=>v!=null),rmin=d.rolling_min.filter(v=>v!=null);
+  const spread=(rmax[rmax.length-1]-rmin[rmin.length-1]).toFixed(2);
+  setAnalysis('ab-rollrange',
+    `Current 5-bar price channel: <strong>$${rmin[rmin.length-1].toFixed(2)} – $${rmax[rmax.length-1].toFixed(2)}</strong> 
+     (spread: <strong>$${spread}</strong>). 
+     A narrow channel suggests consolidation; a wide channel indicates trending conditions.
+     <div class="ab-chips">${chip('Channel spread: $'+spread)}${chip(parseFloat(spread)>1?'Trending':'Consolidating',parseFloat(spread)>1?'warn':'')}</div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// FEATURES TABLE
+// ════════════════════════════════════════════
+let allFeatures=[];
+async function loadFeatures(){
+  allFeatures=await fetch('/api/features/table'+buildParams()).then(r=>r.json());
+  renderFeatTable(allFeatures);
+  const cats=[...new Set(allFeatures.map(r=>r.category))];
+  const countsBycat=cats.map(c=>({cat:c,n:allFeatures.filter(r=>r.category===c).length}));
+  const summary=countsBycat.map(({cat,n})=>`<strong>${n}</strong> ${cat}`).join(', ');
+  setAnalysis('ab-features',
+    `<strong>${allFeatures.length} features</strong> engineered across ${cats.length} categories: ${summary}. 
+     These cover price action, volatility, momentum, trend, and candle shape — 
+     forming a rich multi-dimensional input space for the ML model.
+     <div class="ab-chips">
+       ${countsBycat.map(({cat,n})=>chip(cat+': '+n)).join('')}
+     </div>`
+  );
+}
+function renderFeatTable(rows){
+  document.getElementById('feat-tbody').innerHTML=rows.map(r=>{
+    const tk=FEAT_TIPS[r.feature];
+    const ta=tk?`data-tip="${tk}"`:'';
+    return `<tr>
+      <td ${ta} style="${tk?'cursor:help':''}">${r.feature}${tk?` <span class="info-icon" ${ta}>i</span>`:''}</td>
+      <td>${r.value}</td>
+      <td><span class="cat-pill">${r.category}</span></td>
+      <td style="font-size:.62rem;color:var(--muted);max-width:200px">${tk&&TIPS[tk]?TIPS[tk].body.slice(0,75)+'…':''}</td>
+    </tr>`;
+  }).join('');
+}
+function filterFeatures(cat,btn){
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderFeatTable(cat==='all'?allFeatures:allFeatures.filter(r=>r.category===cat));
+}
+
+// ════════════════════════════════════════════
+// MISSING VALUES
+// ════════════════════════════════════════════
+async function loadMissing(){
+  const d=await fetch('/api/stats/missing').then(r=>r.json());
+  const maxV=Math.max(...d.counts,1);
+  document.getElementById('miss-bars').innerHTML=d.labels.map((l,i)=>{
+    const c=d.counts[i],pct=(c/maxV*100).toFixed(1);
+    const col=c===0?'#22c55e':c<5?'#f59e0b':'#ef4444';
+    return `<div class="miss-row">
+      <div class="miss-label">${l}</div>
+      <div class="miss-bar-bg"><div class="miss-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="miss-count">${c}</div>
+    </div>`;
+  }).join('');
+  const total=d.counts.reduce((a,b)=>a+b,0);
+  const clean=d.counts.filter(c=>c===0).length;
+  const maxMiss=Math.max(...d.counts);
+  const worstCol=d.labels[d.counts.indexOf(maxMiss)];
+  setAnalysis('ab-missing',
+    `Total missing values across all features: <strong>${total}</strong>. 
+     <strong>${clean} of ${d.labels.length} features</strong> are fully clean (0 nulls). 
+     ${maxMiss>0?`The feature with most missing values is <strong>${worstCol}</strong> 
+     (${maxMiss} rows) — expected for rolling window features like RSI or slope at the start of the series.`
+     :'All features are clean — no imputation required.'}
+     <div class="ab-chips">
+       ${chip('Total missing: '+total,total>0?'warn':'')}
+       ${chip('Clean features: '+clean,'bull')}
+       ${maxMiss>0?chip('Most missing: '+worstCol,'warn'):''}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// PREDICTION
+// ════════════════════════════════════════════
+async function loadPrediction(){
+  document.getElementById('pred-loading').style.display='block';
+  document.getElementById('pred-content').style.display='none';
+  try{
+    const d=await fetch('/api/prediction').then(r=>r.json());
+    if(d.error){document.getElementById('pred-loading').innerHTML='<span style="color:var(--red)">'+d.error+'</span>';return;}
+    renderPrediction(d);
+  }catch(e){
+    document.getElementById('pred-loading').innerHTML='<span style="color:var(--red)">Failed — is scikit-learn installed?</span>';
+  }
+}
+
+function renderPrediction(d){
+  document.getElementById('pred-loading').style.display='none';
+  document.getElementById('pred-content').style.display='block';
+  const thr=+document.getElementById('pred-threshold').value;
+  const sig=d.pred_return>thr?'BUY':d.pred_return<-thr?'SELL':'HOLD';
+  const cls={BUY:'sig-buy',SELL:'sig-sell',HOLD:'sig-hold'}[sig];
+  document.getElementById('pred-signal-badge').innerHTML=
+    `<span class="signal-badge ${cls}">${sig}</span>
+     <span style="font-size:.7rem;color:var(--muted);margin-left:8px">Expected return: ${d.pred_return>=0?'+':''}${d.pred_return.toFixed(4)}%</span>`;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('pred-next','$'+d.next_pred.toFixed(2));
+  set('pred-last','$'+d.last_close.toFixed(2));
+  set('pred-mae','$'+d.mae.toFixed(3));
+  set('pred-rmse','$'+d.rmse.toFixed(3));
+  set('pred-dacc',d.dir_acc.toFixed(1)+'%');
+  set('pred-split',d.train_size+' / '+d.test_size);
+  const retEl=document.getElementById('pred-ret-sub');
+  retEl.textContent=(d.pred_return>=0?'+':'')+d.pred_return.toFixed(4)+'% expected';
+  retEl.className='p-sub '+(d.pred_return>=0?'up':'down');
+  document.getElementById('pred-info-row').innerHTML=
+    `<span class="info-chip">Model <span>Random Forest</span></span>
+     <span class="info-chip">Features <span>${Object.keys(d.importances).length}</span></span>
+     <span class="info-chip">Split <span>80/20 time-series</span></span>`;
+
+  // Signal analysis
+  const strategyNote={
+    BUY:`Predicted return of <strong>+${d.pred_return.toFixed(4)}%</strong> exceeds the BUY threshold (+${thr}%). 
+         Per the portfolio strategy: consider allocating <strong>10–20% of capital</strong>. 
+         Apply a stop-loss at <strong>−3%</strong> and set a take-profit target.`,
+    SELL:`Predicted return of <strong>${d.pred_return.toFixed(4)}%</strong> falls below the SELL threshold (−${thr}%). 
+          Consider reducing or exiting the position. Risk management: enforce stop-loss rules.`,
+    HOLD:`Predicted return of <strong>${d.pred_return.toFixed(4)}%</strong> is within the neutral band (±${thr}%). 
+          No directional edge detected — hold current position and monitor.`
+  }[sig];
+  setAnalysis('ab-signal',strategyNote+`<div class="ab-chips">
+    ${chip(sig,sig==='BUY'?'bull':sig==='SELL'?'bear':'warn')}
+    ${chip('Dir. Accuracy: '+d.dir_acc.toFixed(1)+'%',d.dir_acc>55?'bull':d.dir_acc<45?'bear':'warn')}
+    ${chip('MAE: $'+d.mae.toFixed(3))}${chip('RMSE: $'+d.rmse.toFixed(3))}
+  </div>`);
+
+  // Actual vs predicted chart
+  destroy('pred');
+  charts['pred']=new Chart(document.getElementById('chart-pred'),{
+    type:'line',data:{labels:d.test_dates,datasets:[
+      {label:'Actual',   data:d.actual,   borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:.2,fill:false},
+      {label:'Predicted',data:d.predicted,borderColor:'#f59e0b',borderWidth:1.2,pointRadius:0,tension:.2,fill:false,borderDash:[4,3]},
+    ]},options:mo()
+  });
+  const diff=d.actual.map((a,i)=>Math.abs(a-(d.predicted[i]||a)));
+  const avgErr=(diff.reduce((a,b)=>a+b,0)/diff.length).toFixed(3);
+  const maxErr=Math.max(...diff).toFixed(3);
+  setAnalysis('ab-pred-chart',
+    `The model was tested on <strong>${d.test_size} unseen bars</strong> (last 20% of data). 
+     Average prediction error: <strong>$${avgErr}</strong>, worst single error: <strong>$${maxErr}</strong>. 
+     Directional accuracy of <strong>${d.dir_acc.toFixed(1)}%</strong> means the model correctly predicted 
+     price direction ${d.dir_acc>50?'more often than not — a positive signal for trend-following strategies.':'less than half the time — consider tuning or adding features.'}
+     <div class="ab-chips">
+       ${chip('Test bars: '+d.test_size)}${chip('Avg error: $'+avgErr,parseFloat(avgErr)<0.5?'bull':'warn')}
+       ${chip('Dir. acc: '+d.dir_acc.toFixed(1)+'%',d.dir_acc>55?'bull':d.dir_acc<45?'bear':'warn')}
+     </div>`
+  );
+
+  // Feature importances
+  const maxImp=Math.max(...Object.values(d.importances));
+  document.getElementById('imp-bars').innerHTML=Object.entries(d.importances).slice(0,15).map(([k,v])=>`
+    <div class="imp-bar-row">
+      <div class="imp-label" title="${k}">${k}</div>
+      <div class="imp-bar-bg"><div class="imp-bar-fill" style="width:${(v/maxImp*100).toFixed(1)}%"></div></div>
+      <div class="imp-val">${v.toFixed(1)}%</div>
+    </div>`).join('');
+  const top3=Object.entries(d.importances).slice(0,3).map(([k,v])=>`<strong>${k}</strong> (${v.toFixed(1)}%)`).join(', ');
+  setAnalysis('ab-importance',
+    `The three most important features are ${top3}. 
+     Price-based and lag features typically dominate Random Forest models on financial time series. 
+     Features with very low importance could be dropped to reduce overfitting in future iterations.
+     <div class="ab-chips">
+       ${Object.entries(d.importances).slice(0,5).map(([k,v])=>chip(k+': '+v.toFixed(1)+'%')).join('')}
+     </div>`
+  );
+}
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+async function init(){
+  const to=new Date(),from=new Date();
+  from.setDate(from.getDate()-30);
+  document.getElementById('f-from').value=from.toISOString().slice(0,10);
+  document.getElementById('f-to').value=to.toISOString().slice(0,10);
+  filterParams={from:from.toISOString().slice(0,10),to:to.toISOString().slice(0,10)};
+  await loadSummary();
+  await Promise.all([loadPrice(),loadVolume(),loadReturns(),loadRSI(),loadBollinger(),loadMomentum()]);
+  await loadFeatures();
+  await loadMissing();
+  await loadPrediction();
+}
+init();
+</script>
+</body>
+</html>
