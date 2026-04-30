@@ -247,7 +247,7 @@ input[type=date]:focus{border-color:var(--accent)}
 <div id="top-header">
   <div style="display:flex;align-items:center">
     <div class="logo">AAPL<span>.analytics</span></div>
-    <div class="badge">1H · 60D · Random Forest</div>
+    <div class="badge">1H · 60D · LSTM API</div>
   </div>
   <div class="hright">
     <div class="live-dot"></div>
@@ -501,12 +501,12 @@ input[type=date]:focus{border-color:var(--accent)}
       <div class="section-heading">
         <div class="section-num">4</div>
         <div class="section-title">Prediction</div>
-        <div class="section-sub">Random Forest · MAE · RMSE · Signal</div>
+        <div class="section-sub">LSTM FastAPI · Next Close · Signal</div>
       </div>
 
       <div id="pred-loading" class="pred-loading">
-        <div class="spinner"></div>Training Random Forest…<br>
-        <span style="font-size:.7rem;color:var(--muted);margin-top:4px;display:block">This may take a few seconds</span>
+        <div class="spinner"></div>Calling LSTM FastAPI model…<br>
+        <span style="font-size:.7rem;color:var(--muted);margin-top:4px;display:block">The dashboard sends the latest sequence to the model API</span>
       </div>
 
       <div id="pred-content" style="display:none">
@@ -544,9 +544,9 @@ input[type=date]:focus{border-color:var(--accent)}
 
         <!-- Feature importances -->
         <div class="chart-card">
-          <div class="chart-title">Feature Importances (Random Forest) <span class="info-icon" data-tip="importance">i</span></div>
+          <div class="chart-title">LSTM Input Sequence <span class="info-icon" data-tip="importance">i</span></div>
           <div id="imp-bars" style="margin-top:.25rem"></div>
-          <div class="analysis-box" id="ab-importance"><div class="ab-title">Feature Importance Insights</div><div class="ab-text">Loading…</div></div>
+          <div class="analysis-box" id="ab-importance"><div class="ab-title">Model Input Insights</div><div class="ab-text">Loading…</div></div>
         </div>
 
       </div><!-- /pred-content -->
@@ -580,11 +580,11 @@ const TIPS = {
   lag:        {title:"Lag Features",          body:"Previous closing prices shifted by 1, 2, and 3 bars. Give the model recent price history without look-ahead bias.",formula:"Lag1=Ct−1, Lag2=Ct−2, Lag3=Ct−3"},
   hlrange:    {title:"High-Low Range",        body:"Normalised candle range. High values indicate volatile or wide-ranging candles.",formula:"(Hight − Lowt) / Closet"},
   occhange:   {title:"Open-Close Change",     body:"Directional move within a single candle as a fraction of the open price. Positive = bullish candle.",formula:"(Closet − Opent) / Opent"},
-  "pred-next":{title:"Predicted Next Close",  body:"Random Forest model's forecast for the next 1-hour closing price, trained on 80% of data using 21 features.",formula:"ŷ = RF(Close, RSI, MA, BB, Momentum, …)"},
+  "pred-next":{title:"Predicted Next Close",  body:"LSTM FastAPI model forecast for the next 1-hour closing price. The dashboard sends the latest 10-bar feature sequence to the backend model API.",formula:"ŷ = LSTM(sequence of 10 hourly feature rows)"},
   mae:        {title:"MAE — Mean Absolute Error",body:"Average absolute difference between predicted and actual prices on the test set. Lower is better.",formula:"MAE = (1/n)·Σ|yi − ŷi|"},
   rmse:       {title:"RMSE — Root Mean Squared Error",body:"Square root of average squared prediction errors. More sensitive to large errors than MAE.",formula:"RMSE = √[(1/n)·Σ(yi − ŷi)²]"},
   diracc:     {title:"Directional Accuracy",  body:"Percentage of test bars where the model correctly predicted price direction (up or down). More meaningful than RMSE for trading.",formula:"Dir.Acc = #{sign(Δy)=sign(Δŷ)} / n · 100%"},
-  importance: {title:"Feature Importances",   body:"How much each feature contributed to Random Forest predictions (mean impurity decrease). Higher = more influential.",formula:"Σ importances = 100%"},
+  importance: {title:"LSTM Input Features",   body:"The LSTM uses a time sequence of engineered features. Unlike Random Forest, LSTM does not provide simple feature-importance bars by default.",formula:"Input shape = 10 timesteps × number of features"},
 };
 const FEAT_TIPS = {
   "Close":"price","Target (next)":"pred-next","Return 1h":"return","Log Return":"logret",
@@ -1056,90 +1056,130 @@ async function loadPrediction(){
     if(d.error){document.getElementById('pred-loading').innerHTML='<span style="color:var(--red)">'+d.error+'</span>';return;}
     renderPrediction(d);
   }catch(e){
-    document.getElementById('pred-loading').innerHTML='<span style="color:var(--red)">Failed — is scikit-learn installed?</span>';
+    document.getElementById('pred-loading').innerHTML='<span style="color:var(--red)">Failed — check that FastAPI is running on port 8000</span>';
   }
 }
 
 function renderPrediction(d){
   document.getElementById('pred-loading').style.display='none';
   document.getElementById('pred-content').style.display='block';
+
   const thr=+document.getElementById('pred-threshold').value;
   const sig=d.pred_return>thr?'BUY':d.pred_return<-thr?'SELL':'HOLD';
-  const cls={BUY:'sig-buy',SELL:'sig-sell',HOLD:'sig-hold'}[sig];
+  const cls={BUY:'sig-buy',SELL:'sig-sell',HOLD:'sig-hold'}[sig] || 'sig-hold';
+
   document.getElementById('pred-signal-badge').innerHTML=
     `<span class="signal-badge ${cls}">${sig}</span>
-     <span style="font-size:.7rem;color:var(--muted);margin-left:8px">Expected return: ${d.pred_return>=0?'+':''}${d.pred_return.toFixed(4)}%</span>`;
-  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  set('pred-next','$'+d.next_pred.toFixed(2));
-  set('pred-last','$'+d.last_close.toFixed(2));
-  set('pred-mae','$'+d.mae.toFixed(3));
-  set('pred-rmse','$'+d.rmse.toFixed(3));
-  set('pred-dacc',d.dir_acc.toFixed(1)+'%');
-  set('pred-split',d.train_size+' / '+d.test_size);
-  const retEl=document.getElementById('pred-ret-sub');
-  retEl.textContent=(d.pred_return>=0?'+':'')+d.pred_return.toFixed(4)+'% expected';
-  retEl.className='p-sub '+(d.pred_return>=0?'up':'down');
-  document.getElementById('pred-info-row').innerHTML=
-    `<span class="info-chip">Model <span>Random Forest</span></span>
-     <span class="info-chip">Features <span>${Object.keys(d.importances).length}</span></span>
-     <span class="info-chip">Split <span>80/20 time-series</span></span>`;
+     <span style="font-size:.7rem;color:var(--muted);margin-left:8px">
+       Expected return: ${d.pred_return>=0?'+':''}${Number(d.pred_return).toFixed(4)}%
+     </span>`;
 
-  // Signal analysis
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  const fmtMoney=v => (v===null || v===undefined || isNaN(Number(v))) ? '—' : '$'+Number(v).toFixed(2);
+  const fmtMetric=(v,dp=3,prefix='') => (v===null || v===undefined || isNaN(Number(v))) ? '—' : prefix+Number(v).toFixed(dp);
+
+  set('pred-next',fmtMoney(d.next_pred));
+  set('pred-last',fmtMoney(d.last_close));
+  set('pred-mae',fmtMetric(d.mae,3,'$'));
+  set('pred-rmse',fmtMetric(d.rmse,3,'$'));
+  set('pred-dacc',d.dir_acc==null?'—':Number(d.dir_acc).toFixed(1)+'%');
+  set('pred-split',(d.train_size!=null && d.test_size!=null)?`${d.train_size} / ${d.test_size}`:'API');
+
+  const retEl=document.getElementById('pred-ret-sub');
+  retEl.textContent=(d.pred_return>=0?'+':'')+Number(d.pred_return).toFixed(4)+'% expected';
+  retEl.className='p-sub '+(d.pred_return>=0?'up':'down');
+
+  const featureCount = d.feature_count || (d.features_used ? d.features_used.length : null);
+  const shapeText = d.sequence_shape ? d.sequence_shape.join(' × ') : '10 × features';
+
+  document.getElementById('pred-info-row').innerHTML=
+    `<span class="info-chip">Model <span>${d.source || 'FastAPI LSTM'}</span></span>
+     <span class="info-chip">Input <span>${shapeText}</span></span>
+     ${featureCount ? `<span class="info-chip">Features <span>${featureCount}</span></span>` : ''}
+     <span class="info-chip">Connection <span>Dashboard → API</span></span>`;
+
   const strategyNote={
-    BUY:`Predicted return of <strong>+${d.pred_return.toFixed(4)}%</strong> exceeds the BUY threshold (+${thr}%). 
-         Per the portfolio strategy: consider allocating <strong>10–20% of capital</strong>. 
-         Apply a stop-loss at <strong>−3%</strong> and set a take-profit target.`,
-    SELL:`Predicted return of <strong>${d.pred_return.toFixed(4)}%</strong> falls below the SELL threshold (−${thr}%). 
-          Consider reducing or exiting the position. Risk management: enforce stop-loss rules.`,
-    HOLD:`Predicted return of <strong>${d.pred_return.toFixed(4)}%</strong> is within the neutral band (±${thr}%). 
-          No directional edge detected — hold current position and monitor.`
+    BUY:`The LSTM model predicts a next close above the latest close. The expected return is 
+         <strong>+${Number(d.pred_return).toFixed(4)}%</strong>, which is above the BUY threshold (+${thr}%). 
+         This gives a BUY signal, but it should still be treated as a decision-support signal, not a guarantee.`,
+    SELL:`The LSTM model predicts a next close below the latest close. The expected return is 
+          <strong>${Number(d.pred_return).toFixed(4)}%</strong>, which is below the SELL threshold (−${thr}%). 
+          This gives a SELL signal, meaning the model expects short-term downside.`,
+    HOLD:`The predicted return is <strong>${Number(d.pred_return).toFixed(4)}%</strong>, inside the neutral band (±${thr}%). 
+          The model does not show a strong enough move, so the dashboard gives a HOLD signal.`
   }[sig];
+
   setAnalysis('ab-signal',strategyNote+`<div class="ab-chips">
     ${chip(sig,sig==='BUY'?'bull':sig==='SELL'?'bear':'warn')}
-    ${chip('Dir. Accuracy: '+d.dir_acc.toFixed(1)+'%',d.dir_acc>55?'bull':d.dir_acc<45?'bear':'warn')}
-    ${chip('MAE: $'+d.mae.toFixed(3))}${chip('RMSE: $'+d.rmse.toFixed(3))}
+    ${chip('Predicted: '+fmtMoney(d.next_pred))}
+    ${chip('Last close: '+fmtMoney(d.last_close))}
+    ${chip('Source: LSTM API')}
   </div>`);
 
-  // Actual vs predicted chart
-  destroy('pred');
-  charts['pred']=new Chart(document.getElementById('chart-pred'),{
-    type:'line',data:{labels:d.test_dates,datasets:[
-      {label:'Actual',   data:d.actual,   borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:.2,fill:false},
-      {label:'Predicted',data:d.predicted,borderColor:'#f59e0b',borderWidth:1.2,pointRadius:0,tension:.2,fill:false,borderDash:[4,3]},
-    ]},options:mo()
-  });
-  const diff=d.actual.map((a,i)=>Math.abs(a-(d.predicted[i]||a)));
-  const avgErr=(diff.reduce((a,b)=>a+b,0)/diff.length).toFixed(3);
-  const maxErr=Math.max(...diff).toFixed(3);
-  setAnalysis('ab-pred-chart',
-    `The model was tested on <strong>${d.test_size} unseen bars</strong> (last 20% of data). 
-     Average prediction error: <strong>$${avgErr}</strong>, worst single error: <strong>$${maxErr}</strong>. 
-     Directional accuracy of <strong>${d.dir_acc.toFixed(1)}%</strong> means the model correctly predicted 
-     price direction ${d.dir_acc>50?'more often than not — a positive signal for trend-following strategies.':'less than half the time — consider tuning or adding features.'}
-     <div class="ab-chips">
-       ${chip('Test bars: '+d.test_size)}${chip('Avg error: $'+avgErr,parseFloat(avgErr)<0.5?'bull':'warn')}
-       ${chip('Dir. acc: '+d.dir_acc.toFixed(1)+'%',d.dir_acc>55?'bull':d.dir_acc<45?'bear':'warn')}
-     </div>`
-  );
+  const hasBacktest = Array.isArray(d.actual) && Array.isArray(d.predicted) && d.actual.length>0 && d.predicted.length>0;
 
-  // Feature importances
-  const maxImp=Math.max(...Object.values(d.importances));
-  document.getElementById('imp-bars').innerHTML=Object.entries(d.importances).slice(0,15).map(([k,v])=>`
-    <div class="imp-bar-row">
-      <div class="imp-label" title="${k}">${k}</div>
-      <div class="imp-bar-bg"><div class="imp-bar-fill" style="width:${(v/maxImp*100).toFixed(1)}%"></div></div>
-      <div class="imp-val">${v.toFixed(1)}%</div>
-    </div>`).join('');
-  const top3=Object.entries(d.importances).slice(0,3).map(([k,v])=>`<strong>${k}</strong> (${v.toFixed(1)}%)`).join(', ');
+  destroy('pred');
+  if(hasBacktest){
+    charts['pred']=new Chart(document.getElementById('chart-pred'),{
+      type:'line',data:{labels:d.test_dates,datasets:[
+        {label:'Actual',data:d.actual,borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:.2,fill:false},
+        {label:'Predicted',data:d.predicted,borderColor:'#f59e0b',borderWidth:1.2,pointRadius:0,tension:.2,fill:false,borderDash:[4,3]},
+      ]},options:mo()
+    });
+
+    const diff=d.actual.map((a,i)=>Math.abs(a-(d.predicted[i]||a)));
+    const avgErr=(diff.reduce((a,b)=>a+b,0)/diff.length).toFixed(3);
+    const maxErr=Math.max(...diff).toFixed(3);
+
+    setAnalysis('ab-pred-chart',
+      `The dashboard received a dynamic backtest from the LSTM API workflow. 
+       Test bars: <strong>${d.test_size}</strong>. Average prediction error: <strong>$${avgErr}</strong>. 
+       Worst single error: <strong>$${maxErr}</strong>.
+       <div class="ab-chips">
+         ${chip('Backtest bars: '+d.test_size)}
+         ${d.dir_acc!=null ? chip('Dir. acc: '+Number(d.dir_acc).toFixed(1)+'%',d.dir_acc>55?'bull':d.dir_acc<45?'bear':'warn') : ''}
+         ${d.mae!=null ? chip('MAE: $'+Number(d.mae).toFixed(3)) : ''}
+         ${d.rmse!=null ? chip('RMSE: $'+Number(d.rmse).toFixed(3)) : ''}
+       </div>`
+    );
+  }else{
+    setAnalysis('ab-pred-chart',
+      `The LSTM API returned a live next-close prediction. 
+       To draw an actual-vs-predicted chart, the backend must return arrays named 
+       <strong>actual</strong>, <strong>predicted</strong>, and <strong>test_dates</strong>. 
+       The current live prediction still works correctly.
+       <div class="ab-chips">
+         ${chip('Live prediction OK','bull')}
+         ${chip('Backtest arrays missing','warn')}
+       </div>`
+    );
+  }
+
+  const features = d.features_used || [];
+  const impBox=document.getElementById('imp-bars');
+  if(features.length){
+    impBox.innerHTML=features.map((f,i)=>`
+      <div class="imp-bar-row">
+        <div class="imp-label" title="${f}">${f}</div>
+        <div class="imp-bar-bg"><div class="imp-bar-fill" style="width:${Math.max(18,100-(i*2.2))}%"></div></div>
+        <div class="imp-val">input</div>
+      </div>`).join('');
+  }else{
+    impBox.innerHTML=`<div class="analysis-box"><div class="ab-text">No feature list returned by the API.</div></div>`;
+  }
+
   setAnalysis('ab-importance',
-    `The three most important features are ${top3}. 
-     Price-based and lag features typically dominate Random Forest models on financial time series. 
-     Features with very low importance could be dropped to reduce overfitting in future iterations.
+    `This section now shows the <strong>LSTM input features</strong>, not Random Forest importances. 
+     The prediction is generated from the latest <strong>${shapeText}</strong> sequence sent from the dashboard to the FastAPI model.
+     LSTM models learn temporal patterns across the sequence, so they do not expose simple feature importance bars like Random Forest.
      <div class="ab-chips">
-       ${Object.entries(d.importances).slice(0,5).map(([k,v])=>chip(k+': '+v.toFixed(1)+'%')).join('')}
+       ${chip('Model: LSTM API','bull')}
+       ${chip('Sequence: '+shapeText)}
+       ${featureCount ? chip('Features: '+featureCount) : ''}
      </div>`
   );
 }
+
 
 // ════════════════════════════════════════════
 // INIT

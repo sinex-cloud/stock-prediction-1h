@@ -252,15 +252,31 @@ DISPLAY_FEATURE_COLS = [
 ]
 
 
+def extract_prediction_value(api_result):
+    """Support different FastAPI response formats."""
+    prediction_value = (
+        api_result.get("prediction")
+        or api_result.get("predicted_price")
+        or api_result.get("next_pred")
+    )
+
+    if isinstance(prediction_value, list):
+        if prediction_value and isinstance(prediction_value[0], list):
+            prediction_value = prediction_value[0]
+        return float(prediction_value[0])
+
+    return float(prediction_value)
+
+
 def call_lstm_api(df):
-    df_feat = df.dropna(subset=LSTM_FEATURE_COLS).copy()
+    df_feat = df.dropna(subset=LSTM_FEATURE_COLS + ["target"]).copy()
 
-    if len(df_feat) < 10:
-        return {"error": "Need at least 10 clean rows for LSTM prediction."}, 400
+    if len(df_feat) < 25:
+        return {"error": "Need at least 25 clean rows for LSTM prediction/backtest."}, 400
 
-    seq = df_feat[LSTM_FEATURE_COLS].tail(10).astype(float).values.tolist()
-
-    response = requests.post(MODEL_API_URL, json={"sequence": seq}, timeout=30)
+    # 1) Live next-close prediction using latest 10 rows
+    live_seq = df_feat[LSTM_FEATURE_COLS].tail(10).astype(float).values.tolist()
+    response = requests.post(MODEL_API_URL, json={"sequence": live_seq}, timeout=30)
 
     if response.status_code != 200:
         return {
@@ -270,37 +286,73 @@ def call_lstm_api(df):
         }, 500
 
     api_result = response.json()
-
-    # Try to support different API response keys
-    prediction_value = (
-        api_result.get("prediction")
-        or api_result.get("predicted_price")
-        or api_result.get("next_pred")
-    )
-
-    # If prediction is multi-output: [target_price, target_return]
-    if isinstance(prediction_value, list):
-        if prediction_value and isinstance(prediction_value[0], list):
-            prediction_value = prediction_value[0]
-        next_pred = float(prediction_value[0])
-        predicted_return_from_model = float(prediction_value[1]) * 100 if len(prediction_value) > 1 else None
-    else:
-        next_pred = float(prediction_value)
+    next_pred = extract_prediction_value(api_result)
 
     last_close = float(df_feat["Close"].iloc[-1])
     pred_return = ((next_pred - last_close) / last_close) * 100
     signal = "BUY" if pred_return > 0.15 else "SELL" if pred_return < -0.15 else "HOLD"
+
+    # 2) Dynamic backtest for Actual vs Predicted chart
+    # We use the last part of the dataset to build rolling 10-row sequences.
+    # For each sequence ending at i-1, target is row i target/next close.
+    max_backtest_points = 80
+    start_i = max(10, len(df_feat) - max_backtest_points)
+
+    actual = []
+    predicted = []
+    test_dates = []
+
+    for i in range(start_i, len(df_feat)):
+        seq = df_feat[LSTM_FEATURE_COLS].iloc[i-10:i].astype(float).values.tolist()
+        true_value = float(df_feat["target"].iloc[i])
+
+        try:
+            r = requests.post(MODEL_API_URL, json={"sequence": seq}, timeout=30)
+            if r.status_code != 200:
+                continue
+
+            pred_value = extract_prediction_value(r.json())
+
+            if not np.isnan(true_value) and not np.isnan(pred_value):
+                actual.append(round(true_value, 2))
+                predicted.append(round(pred_value, 2))
+                test_dates.append(df_feat["Datetime"].iloc[i].strftime("%b %d %H:%M"))
+
+        except Exception:
+            continue
+
+    mae = rmse = dir_acc = None
+    if len(actual) >= 2:
+        actual_arr = np.array(actual, dtype=float)
+        pred_arr = np.array(predicted, dtype=float)
+
+        mae = float(np.mean(np.abs(actual_arr - pred_arr)))
+        rmse = float(np.sqrt(np.mean((actual_arr - pred_arr) ** 2)))
+
+        actual_direction = np.sign(np.diff(actual_arr))
+        pred_direction = np.sign(np.diff(pred_arr))
+        dir_acc = float(np.mean(actual_direction == pred_direction) * 100)
 
     result = {
         "source": "FastAPI LSTM model",
         "next_pred": round(next_pred, 2),
         "last_close": round(last_close, 2),
         "pred_return": round(pred_return, 4),
-        "model_predicted_return": safe_round(predicted_return_from_model, 4) if "predicted_return_from_model" in locals() else None,
         "signal": signal,
         "api_raw_response": api_result,
         "sequence_shape": [10, len(LSTM_FEATURE_COLS)],
+        "feature_count": len(LSTM_FEATURE_COLS),
         "features_used": LSTM_FEATURE_COLS,
+
+        # Backtest outputs needed by the frontend graph
+        "test_dates": test_dates,
+        "actual": actual,
+        "predicted": predicted,
+        "mae": round(mae, 4) if mae is not None else None,
+        "rmse": round(rmse, 4) if rmse is not None else None,
+        "dir_acc": round(dir_acc, 2) if dir_acc is not None else None,
+        "train_size": len(df_feat) - len(actual),
+        "test_size": len(actual),
     }
     return result, 200
 
